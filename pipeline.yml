@@ -1,0 +1,62 @@
+jobs:
+- name: statefulset-assembler
+  plan:
+  - aggregate:
+    - get: statefulset-assembler-source
+      trigger: true
+    - get: base-image
+      trigger: true
+      params:
+        skip_download: true
+  - task: patch-dockerfile
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: alpine
+      inputs:
+      - name: statefulset-assembler-source
+      outputs:
+      - name: patched-statefulset-assembler-source
+      run:
+        path: sh
+        args:
+        - -exc
+        - |
+          tar cC statefulset-assembler-source . \
+            | tar xC patched-statefulset-assembler-source
+          sed \
+            -i patched-statefulset-assembler-source/Dockerfile \
+            -e 's+^FROM python:alpine$+FROM arm32v7/python:slim+'
+  - put: rpi-statefulset-assembler-image
+    params:
+      build: patched-statefulset-assembler-source
+
+resources:
+- name: statefulset-assembler-source
+  type: git
+  source:
+    uri: https://github.com/kocolosk/couchdb-statefulset-assembler.git
+
+- name: base-image
+  type: docker-image
+  source:
+    repository: arm32v7/python
+    tag: slim
+
+- name: rpi-statefulset-assembler-image
+  type: remote-docker-image
+  source:
+    repository: timotto/rpi-couchdb-statefulset-assembler
+    username: ((docker.username))
+    password: ((docker.password))
+    dockerd: ((dockerd))
+
+resource_types:
+- name: remote-docker-image
+  type: docker-image
+  source:
+    repository: timotto/docker-image-resource
+  privileged: true
+
